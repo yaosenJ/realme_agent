@@ -235,7 +235,12 @@ async def create_charger_advisor_worker(task_description: str) -> ToolResponse:
 
     # 注册文件读取工具
     toolkit.register_tool_function(view_text_file)
-    toolkit.register_agent_skill(r"D:\code\realme_agent\skills\realme-charger-advisor")
+
+    # 使用相对路径获取技能目录
+    _current_dir = os.path.dirname(os.path.abspath(__file__))
+    _skills_dir = os.path.join(_current_dir, "..", "skills")
+    toolkit.register_agent_skill(os.path.join(_skills_dir, "realme-charger-advisor"))
+
     worker = ReActAgent(
         name="ChargerAdvisorWorker",
         sys_prompt="""你是realme充电器购买咨询专家。
@@ -389,7 +394,7 @@ async def create_order_status_worker(task_description: str) -> ToolResponse:
     - 查询订单状态
     - 查询物流信息
 
-    ## ⚠️ 首先检查输入信息（重要！）
+    ## 首先检查输入信息（重要！）
     在执行任何步骤前，先检查用户输入中是否已包含以下信息：
     - 用户登录状态/账号信息
     - 用户已确认的事项（如”已确认使用当前账号查询”）
@@ -726,13 +731,14 @@ class MultiAgentService:
         )
         print("✅ MultiAgentService (Orchestrator-Workers模式) 初始化完成")
 
-    async def process_request(self, user_input: str, thread_id: str = "default") -> str:
+    async def process_request(self, user_input: str, thread_id: str = "default", memory: str = "") -> str:
         """
         处理用户请求
 
         Args:
             user_input: 用户输入
             thread_id: 线程ID
+            memory: 检索回来的长期记忆
 
         Returns:
             响应文本
@@ -744,6 +750,15 @@ class MultiAgentService:
         print(f"👤 [用户输入] {user_input}")
         print(f"{'='*60}")
 
+        # 如果有长期记忆，先添加到短期记忆中（参考 agentscope 的处理方式）
+        if memory:
+            retrieved_msg = Msg(
+                name="long_term_memory",
+                content=f"<long_term_memory>以下是从长期记忆中检索到的内容，可能有帮助：\n{memory}</long_term_memory>",
+                role="user",
+            )
+            await self.orchestrator.memory.add(retrieved_msg)
+
         # Orchestrator 直接处理用户问题
         response = await self.orchestrator(Msg("user", user_input, "user"))
         print("助手回复：", response)
@@ -751,13 +766,14 @@ class MultiAgentService:
 
         return result
 
-    async def stream_response(self, user_input: str, thread_id: str = "default_thread"):
+    async def stream_response(self, user_input: str, thread_id: str = "default_thread", memory: str = ""):
         """
         流式响应生成器
 
         Args:
             user_input: 用户输入
             thread_id: 线程ID
+            memory: 检索回来的长期记忆
 
         Yields:
             响应文本块
@@ -768,6 +784,15 @@ class MultiAgentService:
         print(f"\n{'='*60}")
         print(f"👤 [用户输入] {user_input}")
         print(f"{'='*60}")
+
+        # 如果有长期记忆，先添加到短期记忆中（参考 agentscope 的处理方式）
+        if memory:
+            retrieved_msg = Msg(
+                name="long_term_memory",
+                content=f"<long_term_memory>以下是从长期记忆中检索到的内容，可能有帮助：\n{memory}</long_term_memory>",
+                role="user",
+            )
+            await self.orchestrator.memory.add(retrieved_msg)
 
         # 流式输出
         full_text = ""
@@ -849,9 +874,13 @@ async def demo_handoff():
     await service.initialize()
 
     # 复杂用户问题（涉及多个领域）
-    customer_issue = "帮我我推荐手机充电器和查询附近网点。"
+    # customer_issue = "帮我我推荐手机充电器和查询附近网点。"
 
-    response = await service.process_request(customer_issue)
+    # 记忆测试
+    customer_issue = "你知道我是谁吗？"
+    memory_content = "我叫张三"
+
+    response = await service.process_request(user_input=customer_issue, memory=memory_content)
     print(f"\n💬 助手: {response}")
 
 
