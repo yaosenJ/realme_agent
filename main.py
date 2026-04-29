@@ -2,11 +2,6 @@
 """
 realme 智能客服系统 - 多智能体模式 (Orchestrator-Workers)
 """
-import sys
-import io
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
-
 import asyncio
 import uuid
 import time
@@ -46,7 +41,7 @@ class UserRegisterRequest(BaseModel):
     phone: Optional[str] = None
     real_name: Optional[str] = None
 
-    @field_validator("email", "phone", mode="before")
+    @field_validator("email", "phone","real_name", mode="before")
     @classmethod
     def empty_str_to_none(cls, v: Optional[str]) -> Optional[str]:
         if v is not None and v.strip() == "":
@@ -109,6 +104,7 @@ class OpenAIChatRequest(BaseModel):
     model: str = "doubao-pro-1.5"
     thread: str = "default_thread"
     user_id: Optional[str] = None
+    memory: str = ""
     model_config = ConfigDict(extra="allow")
 
 
@@ -122,14 +118,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
-
+# 生成 JWT 令牌
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=config.ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, config.SECRET_KEY, algorithm=config.ALGORITHM)
 
-
+# 校验 Token 是否合法
 def verify_token(token: str) -> Optional[Dict[str, Any]]:
     try:
         return jwt.decode(token, config.SECRET_KEY, algorithms=[config.ALGORITHM])
@@ -190,11 +186,11 @@ async def chat_completions(req: OpenAIChatRequest, thread: str = "default_thread
     last_content = msg_dicts[-1]["content"] if msg_dicts else ""
 
     if not req.stream:
-        content = await config._multi_agent_service.process_request(last_content, actual_thread)
+        content = await config._multi_agent_service.process_request(last_content, actual_thread, req.memory)
         return {"choices": [{"message": {"role": "assistant", "content": content}}]}
 
     return StreamingResponse(
-            multi_agent_stream_generator(actual_thread, msg_dicts, req.user_id),
+            multi_agent_stream_generator(actual_thread, msg_dicts, req.user_id, req.memory),
             media_type="text/event-stream"
         )
 
