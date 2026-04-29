@@ -2,11 +2,6 @@
 """
 realme 智能客服系统 - 单智能体模式 (Skill)
 """
-import sys
-import io
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
-
 import asyncio
 import uuid
 import time
@@ -109,6 +104,7 @@ class OpenAIChatRequest(BaseModel):
     stream: bool = True
     model: str = "doubao-pro"
     thread: str = "default_thread"
+    memory: str = ""
 
     class Config:
         extra = "allow"
@@ -186,12 +182,22 @@ async def chat_completions(req: OpenAIChatRequest, thread: str = "default_thread
     if not req.stream:
         mem = await get_or_create_thread_memory(actual_thread)
         config._global_agent.memory = mem
+
+        # 如果有长期记忆，先添加到短期记忆中
+        if req.memory:
+            retrieved_msg = Msg(
+                name="long_term_memory",
+                content=f"<long_term_memory>以下是从长期记忆中检索到的内容，可能有帮助：\n{req.memory}</long_term_memory>",
+                role="user",
+            )
+            await config._global_agent.memory.add(retrieved_msg)
+
         reply = await config._global_agent(Msg(name="user", role="user", content=last_content))
         content = "".join(b.get("text", "") for b in reply.content if b.get("type") == "text")
         return {"choices": [{"message": {"role": "assistant", "content": content}}]}
 
     return StreamingResponse(
-        openai_stream_generator(actual_thread, msg_dicts),
+        openai_stream_generator(actual_thread, msg_dicts, req.memory),
         media_type="text/event-stream"
     )
 
