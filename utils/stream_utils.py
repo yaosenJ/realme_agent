@@ -7,10 +7,19 @@ from core.memory_manager import get_or_create_thread_memory
 import config
 
 
-async def openai_stream_generator(thread_id: str, messages: list):
+async def openai_stream_generator(thread_id: str, messages: list, memory: str = ""):
     """单智能体流式响应生成器"""
     thread_memory = await get_or_create_thread_memory(thread_id)
     config._global_agent.memory = thread_memory
+
+    # 如果有长期记忆，先添加到短期记忆中
+    if memory:
+        retrieved_msg = Msg(
+            name="long_term_memory",
+            content=f"<long_term_memory>以下是从长期记忆中检索到的内容，可能有帮助：\n{memory}</long_term_memory>",
+            role="user",
+        )
+        await config._global_agent.memory.add(retrieved_msg)
 
     # 最后一条消息作为当前输入
     last_content = messages[-1]["content"] if messages else ""
@@ -42,14 +51,14 @@ async def openai_stream_generator(thread_id: str, messages: list):
     yield "data: [DONE]\n\n"
 
 
-async def multi_agent_stream_generator(thread_id: str, messages: list, user_id: str = None):
+async def multi_agent_stream_generator(thread_id: str, messages: list, user_id: str = None, memory: str = ""):
     """多智能体流式响应生成器"""
 
     # 最后一条消息作为当前输入
     last_content = messages[-1]["content"] if messages else ""
 
     # 使用多智能体服务流式响应
-    async for chunk in config._multi_agent_service.stream_response(last_content, thread_id):
+    async for chunk in config._multi_agent_service.stream_response(last_content, thread_id, memory):
         if chunk:
             chunk_data = json.dumps({
                 "id": "chatcmpl-realme-multi",
