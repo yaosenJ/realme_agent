@@ -9,14 +9,18 @@ def parse_args():
                        help='服务类型：single-单智能体，multi-多智能体（默认）')
     parser.add_argument('--host', default='localhost', help='服务主机（默认：localhost）')
     parser.add_argument('--thread', default='123457', help='线程ID（默认：123456）')
+    parser.add_argument('--memory', default='', help='长期记忆内容（可选）')
     return parser.parse_args()
 
 def chat_loop(args):
     host = args.host
     port = args.port
     thread_id = args.thread
+    memory = args.memory
 
     print(f"✅ 交互式对话已启动（服务类型：{args.service_type}，端口：{port}，线程：{thread_id}）")
+    if memory:
+        print(f"📝 长期记忆：{memory[:50]}..." if len(memory) > 50 else f"📝 长期记忆：{memory}")
     print("输入 'clear' 清空当前对话，输入 'exit' 退出\n")
 
     # 多轮对话历史
@@ -44,14 +48,18 @@ def chat_loop(args):
         print("助手：", end="", flush=True)
 
         # 使用requests直接发送请求，确保thread参数正确传递
+        request_body = {
+            "model": "glm-5",
+            "messages": messages,
+            "stream": True,
+            "thread": thread_id
+        }
+        if memory:
+            request_body["memory"] = memory
+
         response = requests.post(
             f"http://{host}:{port}/v1/chat/completions",
-            json={
-                "model": "glm-5",
-                "messages": messages,
-                "stream": True,
-                "thread": thread_id
-            },
+            json=request_body,
             stream=True
         )
 

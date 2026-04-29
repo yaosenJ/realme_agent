@@ -9,12 +9,14 @@ def parse_args():
                        help='服务类型：single-单智能体，multi-多智能体（默认）')
     parser.add_argument('--host', default='localhost', help='服务主机（默认：localhost）')
     parser.add_argument('--thread', default='123456', help='线程ID（默认：123456）')
+    parser.add_argument('--memory', default='', help='长期记忆内容（可选）')
     return parser.parse_args()
 
 def chat_loop(args):
     # 构建base_url
     base_url = f"http://{args.host}:{args.port}/v1"
     thread_id = args.thread
+    memory = args.memory
 
     # 初始化客户端
     client = OpenAI(
@@ -23,6 +25,8 @@ def chat_loop(args):
     )
 
     print(f"✅ 交互式对话已启动（服务类型：{args.service_type}，端口：{args.port}，线程：{thread_id}）")
+    if memory:
+        print(f"📝 长期记忆：{memory[:50]}..." if len(memory) > 50 else f"📝 长期记忆：{memory}")
     print("输入 'clear' 清空当前对话，输入 'exit' 退出\n")
 
     # 多轮对话历史
@@ -47,13 +51,17 @@ def chat_loop(args):
         # 加入用户消息
         messages.append({"role": "user", "content": user_input})
 
-        # 发送流式请求 - 使用 extra_body 传递 thread 参数
+        # 发送流式请求 - 使用 extra_body 传递 thread 和 memory 参数
         print("助手：", end="", flush=True)
+        extra_body = {"thread": thread_id}
+        if memory:
+            extra_body["memory"] = memory
+
         response = client.chat.completions.create(
             model="glm-5",
             messages=messages,
             stream=True,
-            extra_body={"thread": thread_id}  # 关键修改：使用 extra_body
+            extra_body=extra_body
         )
 
         # 接收流式返回
